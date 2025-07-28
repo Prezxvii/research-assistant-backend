@@ -1,0 +1,3 @@
+# research-assistant-backend/.gitignore
+node_modules/
+.env
