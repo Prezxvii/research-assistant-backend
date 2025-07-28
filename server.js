@@ -1,20 +1,43 @@
 // research-assistant-backend/server.js
-require('dotenv').config(); // Load environment variables from .env file
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch').default; // Ensure node-fetch is installed (npm install node-fetch@2 if using older Node.js, otherwise built-in fetch can be used in newer Node.js versions)
+const fetch = require('node-fetch').default;
 
 const app = express();
-const PORT = process.env.PORT || 5000; // Default to port 5000
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors()); // Enable CORS for all requests from the frontend
-app.use(express.json()); // Enable parsing of JSON request bodies
+// --- UPDATED CORS CONFIGURATION ---
+const allowedOrigins = [
+  'http://localhost:3000', // For your local frontend development
+  'https://research-assistant-tims-projects-d59677e7.vercel.app', // Your deployed Vercel frontend URL
+  // If you have any other frontend URLs (e.g., another Vercel deployment, Netlify, etc.), add them here
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
+    // or if the origin is in our allowed list.
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'), false);
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly allow these HTTP methods
+  credentials: true, // If your frontend sends cookies or authorization headers
+  allowedHeaders: ['Content-Type', 'Authorization'], // Explicitly allow these headers
+}));
+
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// ... (rest of your server.js code remains the same) ...
 
 // --- Common API Constants (Defined once for clarity and easier updates) ---
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'; // CORRECTED URL
-const MODEL_TO_USE = 'openai/gpt-3.5-turbo'; // Or 'openai/gpt-4o' if you prefer for better results
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MODEL_TO_USE = 'openai/gpt-3.5-turbo';
 
 // Helper function to check for API Key presence
 const checkApiKey = (res) => {
@@ -35,7 +58,7 @@ app.post('/api/search', async (req, res) => {
   }
 
   const OPENROUTER_API_KEY = checkApiKey(res);
-  if (!OPENROUTER_API_KEY) return; // Exit if API key is missing
+  if (!OPENROUTER_API_KEY) return;
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -56,8 +79,8 @@ app.post('/api/search', async (req, res) => {
             content: query,
           },
         ],
-        temperature: 0.7, // Allows some creativity in generated results
-        max_tokens: 500, // Enough tokens for 2-3 summaries
+        temperature: 0.7,
+        max_tokens: 500,
       }),
     });
 
@@ -76,14 +99,11 @@ app.post('/api/search', async (req, res) => {
     if (data && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
       const rawContent = data.choices[0].message.content;
       try {
-        // Attempt to clean and parse the JSON string (models sometimes wrap in ```json)
         const jsonString = rawContent.replace(/^```json\s*|```\s*$/g, '').trim();
         fetchedResults = JSON.parse(jsonString);
-        // Ensure each item has an 'id' for React keys
         fetchedResults = fetchedResults.map((item, index) => ({ ...item, id: item.id || index + 1 }));
       } catch (jsonParseError) {
         console.error("Backend failed to parse OpenRouter search response as JSON:", jsonParseError);
-        // Fallback for AI response that isn't perfectly valid JSON
         fetchedResults = [
           {
             id: 1,
@@ -94,7 +114,6 @@ app.post('/api/search', async (req, res) => {
         ];
       }
     } else {
-      // Fallback if AI provides no content at all
       fetchedResults = [
         {
           id: 1,
@@ -123,7 +142,7 @@ app.post('/api/extract', async (req, res) => {
   }
 
   const OPENROUTER_API_KEY = checkApiKey(res);
-  if (!OPENROUTER_API_KEY) return; // Exit if API key is missing
+  if (!OPENROUTER_API_KEY) return;
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -144,8 +163,8 @@ app.post('/api/extract', async (req, res) => {
             content: `Create a concise outline from the following text:\n\n${textToExtract}`,
           },
         ],
-        temperature: 0.3, // Lower temperature for more factual/direct extraction
-        max_tokens: 300, // Enough tokens for a typical outline
+        temperature: 0.3,
+        max_tokens: 300,
       }),
     });
 
@@ -161,7 +180,7 @@ app.post('/api/extract', async (req, res) => {
     const data = await response.json();
     if (data && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
       const outlineContent = data.choices[0].message.content;
-      res.json({ outline: outlineContent }); // Send the generated outline back to the frontend
+      res.json({ outline: outlineContent });
     } else {
       res.status(500).json({ error: 'AI did not provide outline content.' });
     }
@@ -177,14 +196,14 @@ app.post('/api/extract', async (req, res) => {
 
 // --- API Route for Insight Generation ---
 app.post('/api/insight', async (req, res) => {
-  const { textForInsight } = req.body; // Expect the text for which to generate an insight
+  const { textForInsight } = req.body;
 
   if (!textForInsight) {
     return res.status(400).json({ error: 'Text for insight is required.' });
   }
 
   const OPENROUTER_API_KEY = checkApiKey(res);
-  if (!OPENROUTER_API_KEY) return; // Exit if API key is missing
+  if (!OPENROUTER_API_KEY) return;
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -205,8 +224,8 @@ app.post('/api/insight', async (req, res) => {
             content: `Generate a key insight from the following text:\n\n${textForInsight}`,
           },
         ],
-        temperature: 0.7, // Allow for some creativity in insight generation
-        max_tokens: 150,  // Keep insights concise
+        temperature: 0.7,
+        max_tokens: 150,
       }),
     });
 
@@ -222,7 +241,7 @@ app.post('/api/insight', async (req, res) => {
     const data = await response.json();
     if (data && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
       const insightContent = data.choices[0].message.content;
-      res.json({ insight: insightContent }); // Send the generated insight back to the frontend
+      res.json({ insight: insightContent });
     } else {
       res.status(500).json({ error: 'AI did not provide insight content.' });
     }
@@ -245,10 +264,9 @@ app.post('/api/populate_form', async (req, res) => {
   }
 
   const OPENROUTER_API_KEY = checkApiKey(res);
-  if (!OPENROUTER_API_KEY) return; // Exit if API key is missing
+  if (!OPENROUTER_API_KEY) return;
 
   try {
-    // Construct a detailed prompt for the AI to extract specific information
     const prompt = `Based on the following source text, answer each of the following questions concisely. Provide only the answer for each question, or leave it blank if the information is not directly present. Format your complete response as a JSON object where keys are the exact questions and values are the extracted answers. Ensure the JSON is valid and contains no extra text.
 
     Source Text:
@@ -286,9 +304,9 @@ app.post('/api/populate_form', async (req, res) => {
             content: prompt,
           },
         ],
-        temperature: 0.1, // Keep temperature low for factual extraction
-        max_tokens: 1000, // Allow enough tokens for multiple answers
-        response_format: { type: "json_object" } // Request JSON output if model supports it (GPT-3.5-turbo often benefits from this)
+        temperature: 0.1,
+        max_tokens: 1000,
+        response_format: { type: "json_object" }
       }),
     });
 
@@ -307,14 +325,12 @@ app.post('/api/populate_form', async (req, res) => {
     if (data && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
       const rawContent = data.choices[0].message.content;
       try {
-        // Models might still wrap JSON in markdown, remove it
         const jsonString = rawContent.replace(/^```json\s*|```\s*$/g, '').trim();
         populatedFields = JSON.parse(jsonString);
 
-        // Ensure all original questions are present in the final output, setting empty if AI missed one
         const finalPopulatedFields = {};
         questions.forEach(q => {
-          finalPopulatedFields[q] = populatedFields[q] !== undefined ? populatedFields[q] : ''; // Use AI's answer, or empty if not present
+          finalPopulatedFields[q] = populatedFields[q] !== undefined ? populatedFields[q] : '';
         });
         populatedFields = finalPopulatedFields;
 
@@ -337,17 +353,16 @@ app.post('/api/populate_form', async (req, res) => {
   }
 });
 
-
 // --- NEW: Chat API Endpoint ---
 app.post('/api/chat', async (req, res) => {
-  const { messages } = req.body; // Expects an array of messages [{ role: 'user', content: '...' }, ...]
+  const { messages } = req.body;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Messages array is required for chat.' });
   }
 
   const OPENROUTER_API_KEY = checkApiKey(res);
-  if (!OPENROUTER_API_KEY) return; // Exit if API key is missing
+  if (!OPENROUTER_API_KEY) return;
 
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -357,13 +372,13 @@ app.post('/api/chat', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: MODEL_TO_USE, // Using the common model defined at the top
+        model: MODEL_TO_USE,
         messages: [
           { role: "system", content: "You are a helpful and knowledgeable AI research assistant. Provide concise, accurate, and relevant information. If asked about something beyond your knowledge, admit it gracefully. Keep responses helpful and on topic." },
-          ...messages // Pass the conversation history
+          ...messages
         ],
-        temperature: 0.7, // Balanced creativity for chat
-        max_tokens: 500, // Reasonable limit for chat responses
+        temperature: 0.7,
+        max_tokens: 500,
       }),
     });
 
@@ -379,7 +394,7 @@ app.post('/api/chat', async (req, res) => {
     const data = await response.json();
     if (data && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
       const aiMessageContent = data.choices[0].message.content;
-      res.json({ reply: aiMessageContent }); // Send the AI's response back
+      res.json({ reply: aiMessageContent });
     } else {
       res.status(500).json({ error: 'AI did not provide content for chat response.' });
     }
@@ -402,7 +417,6 @@ app.get('/', (req, res) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`Research Assistant Backend server listening on port ${PORT}`);
-  // Check if API key is loaded on startup (useful for debugging)
   if (process.env.OPENROUTER_API_KEY) {
     console.log("OpenRouter API Key is loaded.");
   } else {
